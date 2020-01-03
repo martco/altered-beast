@@ -9,6 +9,8 @@ import ARKit
 import Foundation
 import SceneKit
 import UIKit
+import Vision
+
 
 class ViewController: UIViewController {
 
@@ -144,38 +146,37 @@ extension ViewController: RectangleDetectorDelegate {
     /// - Tag: CreateReferenceImage
     func rectangleFound(rectangleContent: CIImage) {
         DispatchQueue.main.async {
-            
-            // Ignore detected rectangles if the app is currently tracking an image.
-            guard self.alteredImage == nil else {
-                return
-            }
-            
-            guard let referenceImagePixelBuffer = rectangleContent.toPixelBuffer(pixelFormat: kCVPixelFormatType_32BGRA) else {
-                print("Error: Could not convert rectangle content into an ARReferenceImage.")
-                return
-            }
-            
-            /*
-             Set a default physical width of 50 centimeters for the new reference image.
-             While this estimate is likely incorrect, that's fine for the purpose of the
-             app. The content will still appear in the correct location and at the correct
-             scale relative to the image that's being tracked.
-             */
-            let possibleReferenceImage = ARReferenceImage(referenceImagePixelBuffer, orientation: .up, physicalWidth: CGFloat(0.5))
-            
-            possibleReferenceImage.validate { [weak self] (error) in
-                if let error = error {
-                    print("Reference image validation failed: \(error.localizedDescription)")
-                    return
-                }
-
-                // Try tracking the image that lies within the rectangle which the app just detected.
-                guard let newAlteredImage = AlteredImage(rectangleContent, referenceImage: possibleReferenceImage) else { return }
-                newAlteredImage.delegate = self
-                self?.alteredImage = newAlteredImage
+            do {
+                let model = try VNCoreMLModel(for: Simple().model)
                 
-                // Start the session with the newly recognized image.
-                self?.runImageTrackingSession(with: [newAlteredImage.referenceImage])
+                let request = VNCoreMLRequest(model: model, completionHandler: { request, error in
+                    for observation in request.results! where observation is VNRecognizedObjectObservation {
+                        guard let objectObservation = observation as? VNRecognizedObjectObservation else {
+                            continue
+                        }
+                        
+                        // Select only the label with the highest confidence.
+                        let confidentLabels = objectObservation.labels.filter({ (label) -> Bool in
+                            return label.confidence > 0.7
+                        })
+                        
+                        let c = confidentLabels.first
+                        if(c != nil) {
+                            self.showMessage(" \(request.results!.count) \(c!.identifier) confidence: \(c!.confidence)")
+                        }
+                    }
+                })
+                
+
+                let handler = VNImageRequestHandler(ciImage: rectangleContent, orientation: .up)
+                do {
+                    try handler.perform([request])
+                } catch {
+
+                    print("Failed to perform new classification.\n\(error)")
+                }
+            } catch {
+                fatalError("Failed to load Vision ML model: \(error)")
             }
         }
     }
