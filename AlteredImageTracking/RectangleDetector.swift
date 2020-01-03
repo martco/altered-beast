@@ -53,13 +53,13 @@ class RectangleDetector {
         }
         
         // Look only for one rectangle at a time.
-        request.maximumObservations = 1
+        request.maximumObservations = 12
         
         // Require rectangles to be reasonably large.
-        request.minimumSize = 0.25
+        request.minimumSize = 0.1
         
         // Require high confidence for detection results.
-        request.minimumConfidence = 0.90
+        request.minimumConfidence = 0.9
         
         // Ignore rectangles with a too uneven aspect ratio.
         request.minimumAspectRatio = 0.3
